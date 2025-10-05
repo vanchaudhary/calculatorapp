@@ -1,0 +1,23 @@
+{
+  "name": "calculatorapp",
+  "version": "1.0.0",
+  "description": "A basic calculator web application built with Node.js and Express.  \r It supports basic operations: addition, subtraction, multiplication, and division.",
+  "homepage": "https://github.com/vanchaudhary_microsoft/calculatorapp#readme",
+  "bugs": {
+    "url": "https://github.com/vanchaudhary_microsoft/calculatorapp/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vanchaudhary_microsoft/calculatorapp.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}
