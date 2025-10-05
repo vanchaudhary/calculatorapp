@@ -1,0 +1,41 @@
+name: CI - Build & Test Dockerized Calculator App
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout repo
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Step 2: Build Docker image
+      - name: Build Docker image
+        run: docker build -t calculator-app .
+
+      # Step 3: Run container (simulate deployment)
+      - name: Run container in background
+        run: docker run -d -p 3000:3000 --name calculator-container calculator-app
+
+      # Step 4: Wait for container to start
+      - name: Wait for app to start
+        run: sleep 5
+
+      # Step 5: Check that container is running
+      - name: Verify running container
+        run: docker ps
+
+      # Step 6: Test API endpoint (simulate test)
+      - name: Test app endpoint
+        run: |
+          curl --fail http://localhost:3000 || (echo "❌ App not reachable" && exit 1)
+
+      # Step 7: Simulate deployment success
+      - name: Simulate deployment
+        run: echo "🚀 Successfully built and deployed container in CI!"
