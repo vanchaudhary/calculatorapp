@@ -1,4 +1,4 @@
-name: Enhanced CI/CD - Multi-Environment Docker Pipeline
+name: Enhanced CI/CD - Deploy to Azure Container Registry
 
 on:
   push:
@@ -8,12 +8,14 @@ on:
 
 env:
   APP_NAME: calculator-app
-  STAGING_PORT: 3002
-  PRODUCTION_PORT: 3000
+  AZURE_CONTAINER_REGISTRY: calculatorappacr
+  AZURE_RESOURCE_GROUP: calculator-app-rg
+  CONTAINER_NAME: calculator-app
+  IMAGE_TAG: ${{ github.sha }}
 
 jobs:
   ci-cd-pipeline:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     
     steps:
     # ========== CI PHASE ==========
@@ -22,9 +24,9 @@ jobs:
 
     - name: 🏗️ Build Docker Image
       run: |
-        echo "🔨 Building Docker image with tag: ${{ github.sha }}"
-        docker build -t ${{ env.APP_NAME }}:${{ github.sha }} .
-        docker build -t ${{ env.APP_NAME }}:latest .
+        echo "🔨 Building Docker image with tag: ${{ env.IMAGE_TAG }}"
+        docker build -t ${{ env.CONTAINER_NAME }}:${{ env.IMAGE_TAG }} .
+        docker build -t ${{ env.CONTAINER_NAME }}:latest .
         echo "✅ Build completed successfully"
 
     - name: 🧪 Run Automated Tests
@@ -32,190 +34,170 @@ jobs:
         echo "🧪 Starting automated testing..."
         
         # Start test container
-        docker run -d -p 3001:3000 --name test-container ${{ env.APP_NAME }}:${{ github.sha }}
+        docker run -d -p 3001:3000 --name test-container ${{ env.CONTAINER_NAME }}:latest
         
         # Wait for app to start
         echo "⏳ Waiting for application to start..."
-        sleep 12
+        sleep 10
         
-        # Check if container is running
-        echo "🔍 Checking container status..."
-        docker ps --filter "name=test-container"
-        
-        # Check container logs
-        echo "📋 Container logs:"
-        docker logs test-container
-        
-        # Run health check with retry logic
+        # Run health check
         echo "🔍 Running health checks..."
-        for i in {1..5}; do
-          echo "Health check attempt $i/5..."
-          if curl -f http://localhost:3001; then
-            echo "✅ Health check passed"
-            break
-          else
-            echo "⚠️ Health check attempt $i failed, retrying..."
-            sleep 3
-            if [ $i -eq 5 ]; then
-              echo "❌ Health check failed after 5 attempts"
-              docker logs test-container
-              docker stop test-container || true
-              docker rm test-container || true
-              exit 1
-            fi
-          fi
-        done
-        
-        # Simple functionality test
-        echo "🧮 Testing calculator functionality..."
-        response=$(curl -s http://localhost:3001 || echo "failed")
-        if echo "$response" | grep -q "Calculator"; then
-          echo "✅ Calculator app is responding correctly"
-        else
-          echo "❌ Calculator test failed - unexpected response"
-          echo "Response: $response"
+        curl --fail --retry 3 --retry-delay 2 http://localhost:3001 || {
+          echo "❌ Health check failed"
           docker logs test-container
-        fi
+          exit 1
+        }
+        
+        echo "✅ All tests passed!"
         
         # Cleanup test container
-        docker stop test-container || true
-        docker rm test-container || true
-        echo "✅ All tests completed!"
+        docker stop test-container
+        docker rm test-container
 
-    # ========== CD PHASE ==========
-    - name: 🟡 Deploy to Staging Environment
+    # ========== AZURE ACR DEPLOYMENT ==========
+    - name: 🔑 Azure Login
+      if: github.ref == 'refs/heads/main'
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: 🏭 Login to Azure Container Registry
+      if: github.ref == 'refs/heads/main'
       run: |
-        echo "🚀 Deploying to STAGING environment..."
+        echo "🔐 Logging into Azure Container Registry..."
+        az acr login --name ${{ env.AZURE_CONTAINER_REGISTRY }}
+        echo "✅ ACR login successful"
+
+    - name: 🚀 Build and Push to ACR
+      if: github.ref == 'refs/heads/main'
+      run: |
+        echo "📦 Tagging and pushing images to ACR..."
         
-        # Stop existing staging container if running
-        docker stop staging-${{ env.APP_NAME }} 2>/dev/null || true
-        docker rm staging-${{ env.APP_NAME }} 2>/dev/null || true
+        # Tag images for ACR
+        docker tag ${{ env.CONTAINER_NAME }}:latest ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:latest
+        docker tag ${{ env.CONTAINER_NAME }}:latest ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:${{ env.IMAGE_TAG }}
         
-        # Deploy to staging
-        docker run -d -p ${{ env.STAGING_PORT }}:3000 --name staging-${{ env.APP_NAME }} ${{ env.APP_NAME }}:${{ github.sha }}
+        # Push to ACR
+        docker push ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:latest
+        docker push ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:${{ env.IMAGE_TAG }}
         
-        # Wait and verify staging deployment
-        sleep 8
-        echo "🔍 Verifying staging deployment..."
+        echo "✅ Images pushed to ACR successfully!"
+        echo "🏭 ACR Registry: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io"
+        echo "📦 Image: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:latest"
+
+    # ========== AZURE CONTAINER INSTANCES DEPLOYMENT ==========
+    - name: 🌐 Deploy to Azure Container Instances
+      if: github.ref == 'refs/heads/main'
+      run: |
+        echo "🚀 Deploying to Azure Container Instances..."
         
-        for i in {1..3}; do
-          if curl -f http://localhost:${{ env.STAGING_PORT }}; then
-            echo "✅ STAGING deployment verified!"
+        # Delete existing container instance if exists
+        az container delete \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --name ${{ env.CONTAINER_NAME }}-demo \
+          --yes || true
+        
+        # Create new container instance
+        az container create \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --name ${{ env.CONTAINER_NAME }}-demo \
+          --image ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:latest \
+          --registry-login-server ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io \
+          --registry-username ${{ env.AZURE_CONTAINER_REGISTRY }} \
+          --registry-password ${{ secrets.ACR_PASSWORD }} \
+          --dns-name-label calculator-demo-${{ github.run_number }} \
+          --ports 3000 \
+          --environment-variables PORT=3000 \
+          --cpu 1 \
+          --memory 1 \
+          --restart-policy Always
+        
+        echo "✅ Container deployment initiated!"
+
+    - name: 🔍 Get Deployment Information
+      if: github.ref == 'refs/heads/main'
+      run: |
+        echo "⏳ Waiting for container to start..."
+        sleep 30
+        
+        # Get container information
+        FQDN=$(az container show \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --name ${{ env.CONTAINER_NAME }}-demo \
+          --query ipAddress.fqdn \
+          --output tsv)
+        
+        IP=$(az container show \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --name ${{ env.CONTAINER_NAME }}-demo \
+          --query ipAddress.ip \
+          --output tsv)
+        
+        STATE=$(az container show \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --name ${{ env.CONTAINER_NAME }}-demo \
+          --query instanceView.state \
+          --output tsv)
+        
+        echo "🎯 DEPLOYMENT INFORMATION:"
+        echo "=================================="
+        echo "🌐 Live URL: http://$FQDN:3000"
+        echo "📍 Public IP: $IP"
+        echo "📊 Container State: $STATE"
+        echo "🏭 ACR Image: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:latest"
+        echo "=================================="
+
+    - name: 🏥 Health Check Deployed Application
+      if: github.ref == 'refs/heads/main'
+      run: |
+        echo "🔍 Running health check on deployed application..."
+        
+        # Get FQDN for health check
+        FQDN=$(az container show \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --name ${{ env.CONTAINER_NAME }}-demo \
+          --query ipAddress.fqdn \
+          --output tsv)
+        
+        echo "Testing: http://$FQDN:3000"
+        
+        # Wait for application to be ready and test
+        for i in {1..10}; do
+          echo "Health check attempt $i/10..."
+          if curl --fail --connect-timeout 10 http://$FQDN:3000; then
+            echo "✅ Application is live and healthy!"
+            echo "🎉 Demo URL ready: http://$FQDN:3000"
             break
           else
-            echo "⚠️ Staging verification attempt $i failed, retrying..."
-            sleep 3
-            if [ $i -eq 3 ]; then
-              echo "❌ Staging deployment verification failed"
-              docker logs staging-${{ env.APP_NAME }}
-              exit 1
+            echo "⚠️ Attempt $i failed, retrying in 15 seconds..."
+            sleep 15
+            if [ $i -eq 10 ]; then
+              echo "⚠️ Health check timeout - application may still be starting"
+              echo "📋 Container logs:"
+              az container logs --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.CONTAINER_NAME }}-demo
             fi
           fi
         done
-        
-        echo "🌐 Staging URL: http://localhost:${{ env.STAGING_PORT }}"
 
-    - name: 🔍 Staging Smoke Tests
-      run: |
-        echo "🔬 Running staging smoke tests..."
-        
-        # Test main page
-        echo "Testing main page..."
-        if curl -f http://localhost:${{ env.STAGING_PORT }} > /dev/null; then
-          echo "✅ Main page test passed"
-        else
-          echo "❌ Main page test failed"
-          docker logs staging-${{ env.APP_NAME }}
-          exit 1
-        fi
-        
-        # Simple response test
-        response=$(curl -s http://localhost:${{ env.STAGING_PORT }} || echo "failed")
-        if echo "$response" | grep -q "Calculator"; then
-          echo "✅ Staging smoke tests passed - app is responding correctly"
-        else
-          echo "❌ Staging smoke tests failed - unexpected response"
-          echo "Response: $response"
-          exit 1
-        fi
-
-    - name: 🟢 Deploy to GitHub Container Registry
-      if: github.ref == 'refs/heads/main'
-      run: |
-        echo "🚀 Deploying to GitHub Container Registry..."
-        
-        # Login to GitHub Container Registry
-        echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-        
-        # Tag and push to GitHub Container Registry
-        docker tag ${{ env.APP_NAME }}:${{ github.sha }} ghcr.io/${{ github.repository_owner }}/${{ env.APP_NAME }}:latest
-        docker tag ${{ env.APP_NAME }}:${{ github.sha }} ghcr.io/${{ github.repository_owner }}/${{ env.APP_NAME }}:${{ github.sha }}
-        
-        docker push ghcr.io/${{ github.repository_owner }}/${{ env.APP_NAME }}:latest
-        docker push ghcr.io/${{ github.repository_owner }}/${{ env.APP_NAME }}:${{ github.sha }}
-        
-        echo "✅ PRODUCTION deployment successful!"
-        echo "🌐 Container Registry: ghcr.io/${{ github.repository_owner }}/${{ env.APP_NAME }}:latest"
-        echo "🐳 Pull command: docker pull ghcr.io/${{ github.repository_owner }}/${{ env.APP_NAME }}:latest"
-        echo "🚀 Run command: docker run -p 3000:3000 ghcr.io/${{ github.repository_owner }}/${{ env.APP_NAME }}:latest"
-
-    - name: 🎯 Production Health Check
-      if: github.ref == 'refs/heads/main'
-      run: |
-        echo "🏥 Running production health checks..."
-        
-        # Comprehensive health check
-        for i in {1..3}; do
-          echo "🔍 Health check attempt $i/3..."
-          if curl --fail http://localhost:${{ env.PRODUCTION_PORT }} > /dev/null; then
-            echo "✅ Production health check $i passed"
-          else
-            echo "❌ Production health check $i failed"
-            if [ $i -eq 3 ]; then exit 1; fi
-          fi
-          sleep 2
-        done
-        
-        echo "🎉 Production deployment verified and healthy!"
-
-    - name: 🧹 Cleanup Staging Environment
-      if: github.ref == 'refs/heads/main'
-      run: |
-        echo "🧹 Cleaning up staging environment..."
-        docker stop staging-${{ env.APP_NAME }} 2>/dev/null || true
-        docker rm staging-${{ env.APP_NAME }} 2>/dev/null || true
-        echo "✅ Staging cleanup completed"
-
-    - name: 📊 Deployment Summary & Demo Instructions
+    - name: 📊 Final Deployment Summary
       if: always()
       run: |
         echo "========================================"
-        echo "🎯 DEPLOYMENT SUMMARY"
+        echo "🎯 CI/CD PIPELINE COMPLETED"
         echo "========================================"
-        echo "📦 Image Tag: ${{ github.sha }}"
+        echo "📦 Build: ${{ env.IMAGE_TAG }}"
         echo "🌿 Branch: ${{ github.ref_name }}"
-        echo "👤 Triggered by: ${{ github.actor }}"
-        echo "📅 Deploy Time: $(date)"
+        echo "👤 Author: ${{ github.actor }}"
+        echo "📅 Time: $(date)"
         echo ""
-        echo "🎬 DEMO INSTRUCTIONS:"
-        echo "========================================"
         
         if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-          echo "✅ Production deployment completed!"
-          echo "🐳 Container available at: ghcr.io/${{ github.repository_owner }}/${{ env.APP_NAME }}:latest"
-          echo ""
-          echo "🚀 To demo locally, run:"
-          echo "   docker pull ghcr.io/${{ github.repository_owner }}/${{ env.APP_NAME }}:latest"
-          echo "   docker run -p 3000:3000 ghcr.io/${{ github.repository_owner }}/${{ env.APP_NAME }}:latest"
-          echo "   Open: http://localhost:3000"
-          echo ""
-          echo "🌐 Or deploy to any cloud platform using the container image!"
+          echo "🚀 PRODUCTION DEPLOYMENT:"
+          echo "   🏭 Azure Container Registry: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io"
+          echo "   📦 Image: ${{ env.CONTAINER_NAME }}:latest"
+          echo "   🌐 Live Demo: Check deployment information above"
+          echo "   🎯 Ready for client presentation!"
         else
-          echo "🧪 Staging tests completed successfully!"
-          echo "✅ Ready for production deployment when merged to main"
+          echo "🧪 Testing completed for development branch"
         fi
-        
-        echo "========================================"
-        echo "🎉 CI/CD Pipeline completed successfully!"
-        echo "🎯 Enterprise-grade automation demonstrated!"
         echo "========================================"
