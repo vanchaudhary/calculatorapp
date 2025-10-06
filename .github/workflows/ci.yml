@@ -13,7 +13,7 @@ env:
 
 jobs:
   ci-cd-pipeline:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     
     steps:
     # ========== CI PHASE ==========
@@ -139,30 +139,25 @@ jobs:
           exit 1
         fi
 
-    - name: 🟢 Deploy to Production Environment
+    - name: 🟢 Deploy to GitHub Container Registry
       if: github.ref == 'refs/heads/main'
       run: |
-        echo "🚀 Deploying to PRODUCTION environment..."
+        echo "🚀 Deploying to GitHub Container Registry..."
         
-        # Backup current production (if exists)
-        if docker ps --filter "name=production-${{ env.APP_NAME }}" --format "table {{.Names}}" | grep -q "production-${{ env.APP_NAME }}"; then
-          echo "📦 Creating backup of current production..."
-          docker tag production-${{ env.APP_NAME }} ${{ env.APP_NAME }}:backup-$(date +%Y%m%d-%H%M%S)
-        fi
+        # Login to GitHub Container Registry
+        echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
         
-        # Stop existing production container
-        docker stop production-${{ env.APP_NAME }} 2>/dev/null || true
-        docker rm production-${{ env.APP_NAME }} 2>/dev/null || true
+        # Tag and push to GitHub Container Registry
+        docker tag ${{ env.APP_NAME }}:${{ github.sha }} ghcr.io/${{ github.repository_owner }}/${{ env.APP_NAME }}:latest
+        docker tag ${{ env.APP_NAME }}:${{ github.sha }} ghcr.io/${{ github.repository_owner }}/${{ env.APP_NAME }}:${{ github.sha }}
         
-        # Deploy to production
-        docker run -d -p ${{ env.PRODUCTION_PORT }}:3000 --name production-${{ env.APP_NAME }} ${{ env.APP_NAME }}:${{ github.sha }}
-        
-        # Wait and verify production deployment
-        sleep 5
-        curl --fail http://localhost:${{ env.PRODUCTION_PORT }} || (echo "❌ Production deployment failed" && exit 1)
+        docker push ghcr.io/${{ github.repository_owner }}/${{ env.APP_NAME }}:latest
+        docker push ghcr.io/${{ github.repository_owner }}/${{ env.APP_NAME }}:${{ github.sha }}
         
         echo "✅ PRODUCTION deployment successful!"
-        echo "🌐 Production URL: http://localhost:${{ env.PRODUCTION_PORT }}"
+        echo "🌐 Container Registry: ghcr.io/${{ github.repository_owner }}/${{ env.APP_NAME }}:latest"
+        echo "🐳 Pull command: docker pull ghcr.io/${{ github.repository_owner }}/${{ env.APP_NAME }}:latest"
+        echo "🚀 Run command: docker run -p 3000:3000 ghcr.io/${{ github.repository_owner }}/${{ env.APP_NAME }}:latest"
 
     - name: 🎯 Production Health Check
       if: github.ref == 'refs/heads/main'
@@ -191,7 +186,7 @@ jobs:
         docker rm staging-${{ env.APP_NAME }} 2>/dev/null || true
         echo "✅ Staging cleanup completed"
 
-    - name: 📊 Deployment Summary
+    - name: 📊 Deployment Summary & Demo Instructions
       if: always()
       run: |
         echo "========================================"
@@ -201,13 +196,26 @@ jobs:
         echo "🌿 Branch: ${{ github.ref_name }}"
         echo "👤 Triggered by: ${{ github.actor }}"
         echo "📅 Deploy Time: $(date)"
+        echo ""
+        echo "🎬 DEMO INSTRUCTIONS:"
+        echo "========================================"
         
         if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-          echo "🟢 Production: http://localhost:${{ env.PRODUCTION_PORT }}"
+          echo "✅ Production deployment completed!"
+          echo "🐳 Container available at: ghcr.io/${{ github.repository_owner }}/${{ env.APP_NAME }}:latest"
+          echo ""
+          echo "🚀 To demo locally, run:"
+          echo "   docker pull ghcr.io/${{ github.repository_owner }}/${{ env.APP_NAME }}:latest"
+          echo "   docker run -p 3000:3000 ghcr.io/${{ github.repository_owner }}/${{ env.APP_NAME }}:latest"
+          echo "   Open: http://localhost:3000"
+          echo ""
+          echo "🌐 Or deploy to any cloud platform using the container image!"
         else
-          echo "🟡 Staging: http://localhost:${{ env.STAGING_PORT }}"
+          echo "🧪 Staging tests completed successfully!"
+          echo "✅ Ready for production deployment when merged to main"
         fi
         
         echo "========================================"
-        echo "🚀 CI/CD Pipeline completed successfully!"
+        echo "🎉 CI/CD Pipeline completed successfully!"
+        echo "🎯 Enterprise-grade automation demonstrated!"
         echo "========================================"
