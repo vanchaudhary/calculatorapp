@@ -1,41 +1,165 @@
-name: CI - Build & Test Dockerized Calculator App
+name: Enhanced CI/CD - Multi-Environment Docker Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
   pull_request:
     branches: [ main ]
 
+env:
+  APP_NAME: calculator-app
+  STAGING_PORT: 3002
+  PRODUCTION_PORT: 3000
+
 jobs:
-  build-and-test:
+  ci-cd-pipeline:
     runs-on: self-hosted
-
+    
     steps:
-      # Step 1: Checkout repo
-      - name: Checkout code
-        uses: actions/checkout@v4
+    # ========== CI PHASE ==========
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
 
-      # Step 2: Build Docker image
-      - name: Build Docker image
-        run: docker build -t calculator-app .
+    - name: 🏗️ Build Docker Image
+      run: |
+        echo "🔨 Building Docker image with tag: ${{ github.sha }}"
+        docker build -t ${{ env.APP_NAME }}:${{ github.sha }} .
+        docker build -t ${{ env.APP_NAME }}:latest .
+        echo "✅ Build completed successfully"
 
-      # Step 3: Run container (simulate deployment)
-      - name: Run container in background
-        run: docker run -d -p 3000:3000 --name calculator-container calculator-app
+    - name: 🧪 Run Automated Tests
+      run: |
+        echo "🧪 Starting automated testing..."
+        
+        # Start test container
+        docker run -d -p 3001:3000 --name test-container ${{ env.APP_NAME }}:${{ github.sha }}
+        
+        # Wait for app to start
+        echo "⏳ Waiting for application to start..."
+        sleep 8
+        
+        # Run health check
+        echo "🔍 Running health checks..."
+        curl --fail http://localhost:3001 || (echo "❌ Health check failed" && exit 1)
+        
+        # Test calculator functionality
+        echo "🧮 Testing calculator functionality..."
+        response=$(curl -s -X POST -d "num1=5&num2=3&op=+" http://localhost:3001/calculate)
+        if echo "$response" | grep -q "Result: 8"; then
+          echo "✅ Calculator test passed"
+        else
+          echo "❌ Calculator test failed"
+          exit 1
+        fi
+        
+        # Cleanup test container
+        docker stop test-container && docker rm test-container
+        echo "✅ All tests passed!"
 
-      # Step 4: Wait for container to start
-      - name: Wait for app to start
-        run: sleep 5
+    # ========== CD PHASE ==========
+    - name: 🟡 Deploy to Staging Environment
+      run: |
+        echo "🚀 Deploying to STAGING environment..."
+        
+        # Stop existing staging container if running
+        docker stop staging-${{ env.APP_NAME }} 2>/dev/null || true
+        docker rm staging-${{ env.APP_NAME }} 2>/dev/null || true
+        
+        # Deploy to staging
+        docker run -d -p ${{ env.STAGING_PORT }}:3000 --name staging-${{ env.APP_NAME }} ${{ env.APP_NAME }}:${{ github.sha }}
+        
+        # Wait and verify staging deployment
+        sleep 5
+        curl --fail http://localhost:${{ env.STAGING_PORT }} || (echo "❌ Staging deployment failed" && exit 1)
+        
+        echo "✅ STAGING deployment successful!"
+        echo "🌐 Staging URL: http://localhost:${{ env.STAGING_PORT }}"
 
-      # Step 5: Check that container is running
-      - name: Verify running container
-        run: docker ps
+    - name: 🔍 Staging Smoke Tests
+      run: |
+        echo "🔬 Running staging smoke tests..."
+        
+        # Test main page
+        curl --fail http://localhost:${{ env.STAGING_PORT }} > /dev/null
+        
+        # Test calculation
+        response=$(curl -s -X POST -d "num1=10&num2=5&op=-" http://localhost:${{ env.STAGING_PORT }}/calculate)
+        if echo "$response" | grep -q "Result: 5"; then
+          echo "✅ Staging smoke tests passed"
+        else
+          echo "❌ Staging smoke tests failed"
+          exit 1
+        fi
 
-      # Step 6: Test API endpoint (simulate test)
-      - name: Test app endpoint
-        run: |
-          curl --fail http://localhost:3000 || (echo "❌ App not reachable" && exit 1)
+    - name: 🟢 Deploy to Production Environment
+      if: github.ref == 'refs/heads/main'
+      run: |
+        echo "🚀 Deploying to PRODUCTION environment..."
+        
+        # Backup current production (if exists)
+        if docker ps --filter "name=production-${{ env.APP_NAME }}" --format "table {{.Names}}" | grep -q "production-${{ env.APP_NAME }}"; then
+          echo "📦 Creating backup of current production..."
+          docker tag production-${{ env.APP_NAME }} ${{ env.APP_NAME }}:backup-$(date +%Y%m%d-%H%M%S)
+        fi
+        
+        # Stop existing production container
+        docker stop production-${{ env.APP_NAME }} 2>/dev/null || true
+        docker rm production-${{ env.APP_NAME }} 2>/dev/null || true
+        
+        # Deploy to production
+        docker run -d -p ${{ env.PRODUCTION_PORT }}:3000 --name production-${{ env.APP_NAME }} ${{ env.APP_NAME }}:${{ github.sha }}
+        
+        # Wait and verify production deployment
+        sleep 5
+        curl --fail http://localhost:${{ env.PRODUCTION_PORT }} || (echo "❌ Production deployment failed" && exit 1)
+        
+        echo "✅ PRODUCTION deployment successful!"
+        echo "🌐 Production URL: http://localhost:${{ env.PRODUCTION_PORT }}"
 
-      # Step 7: Simulate deployment success
-      - name: Simulate deployment
-        run: echo "🚀 Successfully built and deployed container in CI!"
+    - name: 🎯 Production Health Check
+      if: github.ref == 'refs/heads/main'
+      run: |
+        echo "🏥 Running production health checks..."
+        
+        # Comprehensive health check
+        for i in {1..3}; do
+          echo "🔍 Health check attempt $i/3..."
+          if curl --fail http://localhost:${{ env.PRODUCTION_PORT }} > /dev/null; then
+            echo "✅ Production health check $i passed"
+          else
+            echo "❌ Production health check $i failed"
+            if [ $i -eq 3 ]; then exit 1; fi
+          fi
+          sleep 2
+        done
+        
+        echo "🎉 Production deployment verified and healthy!"
+
+    - name: 🧹 Cleanup Staging Environment
+      if: github.ref == 'refs/heads/main'
+      run: |
+        echo "🧹 Cleaning up staging environment..."
+        docker stop staging-${{ env.APP_NAME }} 2>/dev/null || true
+        docker rm staging-${{ env.APP_NAME }} 2>/dev/null || true
+        echo "✅ Staging cleanup completed"
+
+    - name: 📊 Deployment Summary
+      if: always()
+      run: |
+        echo "========================================"
+        echo "🎯 DEPLOYMENT SUMMARY"
+        echo "========================================"
+        echo "📦 Image Tag: ${{ github.sha }}"
+        echo "🌿 Branch: ${{ github.ref_name }}"
+        echo "👤 Triggered by: ${{ github.actor }}"
+        echo "📅 Deploy Time: $(date)"
+        
+        if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+          echo "🟢 Production: http://localhost:${{ env.PRODUCTION_PORT }}"
+        else
+          echo "🟡 Staging: http://localhost:${{ env.STAGING_PORT }}"
+        fi
+        
+        echo "========================================"
+        echo "🚀 CI/CD Pipeline completed successfully!"
+        echo "========================================"
