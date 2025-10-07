@@ -6,7 +6,7 @@ app.use(express.urlencoded({ extended: true }));
 
 app.get('/', (req, res) => {
   res.send(`
-    <h2>Simple Calculator</h2>
+    <h2>🚀 Calculator App - Azure Demo v1.0</h2>
     <form method="post" action="/calculate">
       <input name="num1" type="number" step="any" required>
       <select name="op">
