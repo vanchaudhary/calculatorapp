@@ -91,21 +91,21 @@ jobs:
       run: |
         echo "🚀 Deploying to Azure Container Instances..."
         
-        # Delete existing container instance if exists
-        az container delete \
-          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-          --name ${{ env.CONTAINER_NAME }}-demo \
-          --yes || true
+        # Create container instance with unique name using run number
+        CONTAINER_NAME="calculator-demo-${{ github.run_number }}"
+        DNS_LABEL="calculator-demo-${{ github.run_number }}"
         
-        # Create new container instance
+        echo "📦 Creating container: $CONTAINER_NAME"
+        echo "🌐 DNS Label: $DNS_LABEL"
+        
         az container create \
           --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-          --name ${{ env.CONTAINER_NAME }}-demo \
+          --name $CONTAINER_NAME \
           --image ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:latest \
           --registry-login-server ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io \
           --registry-username ${{ env.AZURE_CONTAINER_REGISTRY }} \
           --registry-password ${{ secrets.ACR_PASSWORD }} \
-          --dns-name-label calculator-demo-${{ github.run_number }} \
+          --dns-name-label $DNS_LABEL \
           --ports 3000 \
           --environment-variables PORT=3000 \
           --cpu 1 \
@@ -113,6 +113,7 @@ jobs:
           --restart-policy Always
         
         echo "✅ Container deployment initiated!"
+        echo "📝 Container Name: $CONTAINER_NAME"
 
     - name: 🔍 Get Deployment Information
       if: github.ref == 'refs/heads/main'
@@ -120,22 +121,25 @@ jobs:
         echo "⏳ Waiting for container to start..."
         sleep 30
         
+        # Set container name with run number
+        CONTAINER_NAME="calculator-demo-${{ github.run_number }}"
+        
         # Get container information
         FQDN=$(az container show \
           --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-          --name ${{ env.CONTAINER_NAME }}-demo \
+          --name $CONTAINER_NAME \
           --query ipAddress.fqdn \
           --output tsv)
         
         IP=$(az container show \
           --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-          --name ${{ env.CONTAINER_NAME }}-demo \
+          --name $CONTAINER_NAME \
           --query ipAddress.ip \
           --output tsv)
         
         STATE=$(az container show \
           --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-          --name ${{ env.CONTAINER_NAME }}-demo \
+          --name $CONTAINER_NAME \
           --query instanceView.state \
           --output tsv)
         
@@ -152,10 +156,11 @@ jobs:
       run: |
         echo "🔍 Running health check on deployed application..."
         
-        # Get FQDN for health check
+        # Set container name and get FQDN for health check
+        CONTAINER_NAME="calculator-demo-${{ github.run_number }}"
         FQDN=$(az container show \
           --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-          --name ${{ env.CONTAINER_NAME }}-demo \
+          --name $CONTAINER_NAME \
           --query ipAddress.fqdn \
           --output tsv)
         
@@ -174,7 +179,7 @@ jobs:
             if [ $i -eq 10 ]; then
               echo "⚠️ Health check timeout - application may still be starting"
               echo "📋 Container logs:"
-              az container logs --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.CONTAINER_NAME }}-demo
+              az container logs --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name $CONTAINER_NAME
             fi
           fi
         done
