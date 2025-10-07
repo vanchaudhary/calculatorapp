@@ -107,6 +107,7 @@ jobs:
           --registry-password ${{ secrets.ACR_PASSWORD }} \
           --dns-name-label $DNS_LABEL \
           --ports 3000 \
+          --os-type Linux \
           --environment-variables PORT=3000 \
           --cpu 1 \
           --memory 1 \
