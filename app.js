@@ -7,7 +7,16 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 // Database configuration
-const dbConfig = {
+const dbConfig = process.env.AZURE_SQL_CONNECTION_STRING ? {
+    server: 'calculator-sql-server-vc.database.windows.net',
+    database: 'calculator',
+    user: 'sqladmin',
+    password: 'Calculator123!',
+    options: {
+        encrypt: true,
+        trustServerCertificate: false
+    }
+} : {
     server: process.env.SQL_SERVER || 'localhost',
     database: process.env.SQL_DATABASE || 'calculator-db',
     user: process.env.SQL_USER || 'sa',
@@ -34,9 +43,10 @@ let pool;
 
 async function connectToDatabase() {
     try {
-        if (process.env.SQL_SERVER) {
+        if (process.env.AZURE_SQL_CONNECTION_STRING || process.env.SQL_SERVER) {
             pool = await sql.connect(dbConfig);
-            console.log('✅ Connected to database');
+            console.log('✅ Connected to Azure SQL Database');
+            console.log('📊 Database: calculator');
         } else {
             console.log('⚠️ Running in demo mode without database');
         }
@@ -54,18 +64,18 @@ async function getOrCreateUser(sessionId) {
         // Check if user exists
         const result = await pool.request()
             .input('sessionId', sql.NVarChar, sessionId)
-            .query('SELECT UserID FROM Users WHERE SessionID = @sessionId');
+            .query('SELECT id FROM Users WHERE session_id = @sessionId');
         
         if (result.recordset.length > 0) {
-            return result.recordset[0].UserID;
+            return result.recordset[0].id;
         }
         
         // Create new user
         const newUser = await pool.request()
             .input('sessionId', sql.NVarChar, sessionId)
-            .query('INSERT INTO Users (SessionID) OUTPUT INSERTED.UserID VALUES (@sessionId)');
+            .query('INSERT INTO Users (session_id) OUTPUT INSERTED.id VALUES (@sessionId)');
         
-        return newUser.recordset[0].UserID;
+        return newUser.recordset[0].id;
     } catch (err) {
         console.error('Error managing user:', err.message);
         return null;
@@ -77,10 +87,11 @@ async function saveCalculation(userId, expression, result) {
     
     try {
         await pool.request()
-            .input('userId', sql.Int, userId)
+            .input('userId', sql.UniqueIdentifier, userId)
             .input('expression', sql.NVarChar, expression)
-            .input('result', sql.Decimal, result)
-            .query('INSERT INTO Calculations (UserID, Expression, Result) VALUES (@userId, @expression, @result)');
+            .input('result', sql.NVarChar, result.toString())
+            .query('INSERT INTO Calculations (user_id, expression, result) VALUES (@userId, @expression, @result)');
+        console.log('✅ Calculation saved:', expression, '=', result);
     } catch (err) {
         console.error('Error saving calculation:', err.message);
     }
@@ -91,15 +102,15 @@ async function getCalculationHistory(userId, limit = 5) {
     
     try {
         const result = await pool.request()
-            .input('userId', sql.Int, userId)
+            .input('userId', sql.UniqueIdentifier, userId)
             .input('limit', sql.Int, limit)
             .query(`
                 SELECT TOP(@limit) 
-                    Expression + ' = ' + CAST(Result AS nvarchar) as DisplayText,
-                    FORMAT(CalculationDate, 'MMM dd, HH:mm') as FormattedDate
+                    expression + ' = ' + result as DisplayText,
+                    FORMAT(created_at, 'MMM dd, HH:mm') as FormattedDate
                 FROM Calculations 
-                WHERE UserID = @userId 
-                ORDER BY CalculationDate DESC
+                WHERE user_id = @userId 
+                ORDER BY created_at DESC
             `);
         
         return result.recordset;
@@ -111,8 +122,11 @@ async function getCalculationHistory(userId, limit = 5) {
 
 // Routes
 app.get('/', async (req, res) => {
+    console.log('🔍 GET / - Pool status:', !!pool);
     const userId = await getOrCreateUser(req.sessionID);
+    console.log('🔍 GET / - User ID:', userId);
     const history = await getCalculationHistory(userId);
+    console.log('🔍 GET / - History length:', history.length);
     
     res.render('calculator', { 
         history: history,
@@ -138,6 +152,9 @@ app.post('/calculate', async (req, res) => {
     // Save calculation to database
     const userId = await getOrCreateUser(req.sessionID);
     const expression = `${num1} ${op} ${num2}`;
+    console.log('🔍 POST /calculate - Pool status:', !!pool);
+    console.log('🔍 POST /calculate - User ID:', userId);
+    console.log('🔍 POST /calculate - Expression:', expression, '=', result);
     await saveCalculation(userId, expression, result);
     
     // Get updated history
@@ -162,13 +179,13 @@ app.get('/api/stats', async (req, res) => {
     
     try {
         const stats = await pool.request()
-            .input('userId', sql.Int, userId)
+            .input('userId', sql.UniqueIdentifier, userId)
             .query(`
                 SELECT 
                     COUNT(*) as TotalCalculations,
-                    COUNT(DISTINCT CAST(CalculationDate AS DATE)) as DaysActive
+                    COUNT(DISTINCT CAST(created_at AS DATE)) as DaysActive
                 FROM Calculations 
-                WHERE UserID = @userId
+                WHERE user_id = @userId
             `);
         
         res.json(stats.recordset[0]);
