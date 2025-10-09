@@ -26,13 +26,58 @@ jobs:
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
     
-    - name: 🗄️ Deploy Database Schema
-      uses: azure/sql-action@v2.3
-      with:        
-        connection-string: ${{ secrets.AZURE_SQL_CONNECTION_STRING }}
-        path: './database/Calculator.sqlproj'
-        action: 'publish'
-        arguments: '/p:DropObjectsNotInSource=false'
+    - name: 🗄️ Deploy Database Schema using sqlcmd
+      run: |
+        # Install sqlcmd
+        curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
+        curl https://packages.microsoft.com/config/ubuntu/20.04/prod.list | sudo tee /etc/apt/sources.list.d/msprod.list
+        sudo apt-get update
+        sudo ACCEPT_EULA=Y apt-get install -y mssql-tools unixodbc-dev
+        
+        # Add sqlcmd to PATH
+        export PATH="$PATH:/opt/mssql-tools/bin"
+        
+        # Create database schema
+        /opt/mssql-tools/bin/sqlcmd -S calculator-sql-server-vc.database.windows.net \
+          -d calculator \
+          -U sqladmin \
+          -P '${{ secrets.AZURE_SQL_PASSWORD }}' \
+          -Q "
+          IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Users' AND xtype='U')
+          BEGIN
+              CREATE TABLE Users (
+                  id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+                  session_id NVARCHAR(255) UNIQUE NOT NULL,
+                  created_at DATETIME2 DEFAULT GETDATE()
+              );
+              PRINT 'Users table created successfully';
+          END
+          ELSE
+          BEGIN
+              PRINT 'Users table already exists';
+          END;
+          
+          IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Calculations' AND xtype='U')
+          BEGIN
+              CREATE TABLE Calculations (
+                  id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+                  user_id UNIQUEIDENTIFIER REFERENCES Users(id),
+                  expression NVARCHAR(500) NOT NULL,
+                  result NVARCHAR(100) NOT NULL,
+                  created_at DATETIME2 DEFAULT GETDATE()
+              );
+              PRINT 'Calculations table created successfully';
+          END
+          ELSE
+          BEGIN
+              PRINT 'Calculations table already exists';
+          END;
+          
+          SELECT TABLE_NAME, 'Table exists' as Status
+          FROM INFORMATION_SCHEMA.TABLES 
+          WHERE TABLE_SCHEMA = 'dbo' 
+          AND TABLE_NAME IN ('Users', 'Calculations');
+          "
         
     - name: ✅ Database Deployment Complete
       run: echo "✅ Database schema deployed successfully"
