@@ -61,10 +61,47 @@ jobs:
     - name: 🗄️ Deploy Database Schema to Staging
       uses: azure/sql-action@v2.3
       with:        
-        connection-string: ${{ secrets.AZURE_SQL_STAGING_CONNECTION_STRING }}
-        path: './database/Calculator.sqlproj'
-        action: 'publish'
-        arguments: '/p:DropObjectsNotInSource=false /p:BlockOnPossibleDataLoss=true'
+        connection-string: ${{ secrets.AZURE_SQL_CONNECTION_STRING }}
+        path: |
+          -- Create Users table if not exists
+          IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Users' AND xtype='U')
+          BEGIN
+              CREATE TABLE Users (
+                  id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+                  session_id NVARCHAR(255) UNIQUE NOT NULL,
+                  created_at DATETIME2 DEFAULT GETDATE()
+              );
+              PRINT 'Users table created successfully';
+          END
+          ELSE
+          BEGIN
+              PRINT 'Users table already exists';
+          END
+          
+          -- Create Calculations table if not exists
+          IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Calculations' AND xtype='U')
+          BEGIN
+              CREATE TABLE Calculations (
+                  id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+                  user_id UNIQUEIDENTIFIER REFERENCES Users(id),
+                  expression NVARCHAR(500) NOT NULL,
+                  result NVARCHAR(100) NOT NULL,
+                  created_at DATETIME2 DEFAULT GETDATE()
+              );
+              PRINT 'Calculations table created successfully';
+          END
+          ELSE
+          BEGIN
+              PRINT 'Calculations table already exists';
+          END
+          
+          -- Verify tables exist
+          SELECT 
+              TABLE_NAME,
+              'Table exists' as Status
+          FROM INFORMATION_SCHEMA.TABLES 
+          WHERE TABLE_SCHEMA = 'dbo' 
+          AND TABLE_NAME IN ('Users', 'Calculations');
         
     - name: 🧪 Run Database Tests on Staging
       run: echo "✅ Database deployment to staging completed successfully"
@@ -104,15 +141,44 @@ jobs:
     - name: 🗄️ Deploy Database Schema to Production
       uses: azure/sql-action@v2.3
       with:        
-        connection-string: ${{ secrets.AZURE_SQL_PRODUCTION_CONNECTION_STRING }}
-        path: './database/Calculator.sqlproj'
-        action: 'publish'
-        arguments: '/p:DropObjectsNotInSource=false /p:BlockOnPossibleDataLoss=true'
+        connection-string: ${{ secrets.AZURE_SQL_CONNECTION_STRING }}
+        path: |
+          -- Create Users table if not exists
+          IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Users' AND xtype='U')
+          BEGIN
+              CREATE TABLE Users (
+                  id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+                  session_id NVARCHAR(255) UNIQUE NOT NULL,
+                  created_at DATETIME2 DEFAULT GETDATE()
+              );
+              PRINT 'Users table created successfully';
+          END
+          ELSE
+          BEGIN
+              PRINT 'Users table already exists';
+          END
+          
+          -- Create Calculations table if not exists
+          IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Calculations' AND xtype='U')
+          BEGIN
+              CREATE TABLE Calculations (
+                  id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+                  user_id UNIQUEIDENTIFIER REFERENCES Users(id),
+                  expression NVARCHAR(500) NOT NULL,
+                  result NVARCHAR(100) NOT NULL,
+                  created_at DATETIME2 DEFAULT GETDATE()
+              );
+              PRINT 'Calculations table created successfully';
+          END
+          ELSE
+          BEGIN
+              PRINT 'Calculations table already exists';
+          END
         
     - name: ✅ Verify Production Deployment
       uses: azure/sql-action@v2.3
       with:        
-        connection-string: ${{ secrets.AZURE_SQL_PRODUCTION_CONNECTION_STRING }}
+        connection-string: ${{ secrets.AZURE_SQL_CONNECTION_STRING }}
         path: |
           SELECT 
             COUNT(*) as TableCount,
