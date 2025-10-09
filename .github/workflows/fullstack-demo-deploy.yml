@@ -180,10 +180,7 @@ jobs:
           --os-type Linux \
           --environment-variables \
             NODE_ENV=production \
-            SQL_SERVER="${{ secrets.SQL_SERVER }}" \
-            SQL_DATABASE="${{ secrets.SQL_DATABASE }}" \
-            SQL_USER="${{ secrets.SQL_USER }}" \
-            SQL_PASSWORD="${{ secrets.SQL_PASSWORD }}" \
+            AZURE_SQL_CONNECTION_STRING="${{ secrets.AZURE_SQL_CONNECTION_STRING }}" \
             SESSION_SECRET="${{ secrets.SESSION_SECRET }}" \
           --cpu 1 \
           --memory 1 \
