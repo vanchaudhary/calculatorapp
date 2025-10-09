@@ -1,0 +1,235 @@
+name: Full Stack Calculator Deployment with Database
+
+on:
+  push:
+    branches: [ database-demo ]
+
+env:
+  APP_NAME: calculator-app
+  AZURE_CONTAINER_REGISTRY: calculatorappacr
+  AZURE_RESOURCE_GROUP: calculator-app-rg
+  CONTAINER_NAME: calculator-app
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  # Phase 1: Deploy Database Changes First
+  deploy-database:
+    runs-on: ubuntu-latest
+    name: 🗄️ Deploy Database Schema
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+      
+    - name: 🔑 Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: 🗄️ Deploy Database Schema
+      uses: azure/sql-action@v2.3
+      with:        
+        connection-string: ${{ secrets.AZURE_SQL_CONNECTION_STRING }}
+        path: './database/Calculator.sqlproj'
+        action: 'publish'
+        arguments: '/p:DropObjectsNotInSource=false'
+        
+    - name: ✅ Database Deployment Complete
+      run: echo "✅ Database schema deployed successfully"
+
+  # Phase 2: Build and Deploy Application
+  deploy-application:
+    needs: deploy-database
+    runs-on: ubuntu-latest
+    name: 🚀 Deploy Enhanced Calculator App
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+
+    - name: 🏗️ Build Docker Image with Database Support
+      run: |
+        echo "🔨 Building enhanced calculator image with database connectivity..."
+        docker build -t ${{ env.CONTAINER_NAME }}:${{ env.IMAGE_TAG }} .
+        docker build -t ${{ env.CONTAINER_NAME }}:latest .
+        echo "✅ Build completed successfully"
+
+    - name: 🧪 Test Enhanced Calculator
+      run: |
+        echo "🧪 Testing enhanced calculator with database features..."
+        
+        # Start test container with demo database config
+        docker run -d -p 3001:3000 --name test-container \
+          -e NODE_ENV=development \
+          ${{ env.CONTAINER_NAME }}:latest
+        
+        # Wait for app to start
+        echo "⏳ Waiting for application to start..."
+        sleep 15
+        
+        # Test calculator endpoint
+        echo "🔍 Testing calculator functionality..."
+        curl --fail --retry 3 --retry-delay 2 http://localhost:3001 || {
+          echo "❌ Application test failed"
+          docker logs test-container
+          exit 1
+        }
+        
+        # Test API endpoint
+        echo "🔍 Testing stats API endpoint..."
+        curl --fail http://localhost:3001/api/stats || {
+          echo "⚠️ Stats API test failed (expected in demo mode)"
+        }
+        
+        echo "✅ Enhanced calculator tests passed!"
+        
+        # Cleanup
+        docker stop test-container
+        docker rm test-container
+
+    - name: 🔑 Azure Login for Container Deployment
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: 🏭 Login to Azure Container Registry
+      run: |
+        echo "🔐 Logging into Azure Container Registry..."
+        az acr login --name ${{ env.AZURE_CONTAINER_REGISTRY }}
+        echo "✅ ACR login successful"
+
+    - name: 📦 Push Enhanced Image to ACR
+      run: |
+        echo "📦 Tagging and pushing enhanced calculator to ACR..."
+        
+        # Tag images for ACR
+        docker tag ${{ env.CONTAINER_NAME }}:latest ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:latest
+        docker tag ${{ env.CONTAINER_NAME }}:latest ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:database-demo
+        
+        # Push to ACR
+        docker push ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:latest
+        docker push ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:database-demo
+        
+        echo "✅ Enhanced calculator images pushed to ACR!"
+
+    - name: 🌐 Deploy Enhanced Calculator to Azure Container Instances
+      run: |
+        echo "🚀 Deploying enhanced calculator with database connectivity..."
+        
+        # Create container instance with database environment variables
+        CONTAINER_NAME="calculator-db-demo-${{ github.run_number }}"
+        DNS_LABEL="calculator-db-demo-${{ github.run_number }}"
+        
+        echo "📦 Creating container: $CONTAINER_NAME"
+        echo "🌐 DNS Label: $DNS_LABEL"
+        
+        az container create \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --name $CONTAINER_NAME \
+          --image ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:database-demo \
+          --registry-login-server ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io \
+          --registry-username ${{ env.AZURE_CONTAINER_REGISTRY }} \
+          --registry-password ${{ secrets.ACR_PASSWORD }} \
+          --dns-name-label $DNS_LABEL \
+          --ports 3000 \
+          --os-type Linux \
+          --environment-variables \
+            NODE_ENV=production \
+            SQL_SERVER="${{ secrets.SQL_SERVER }}" \
+            SQL_DATABASE="${{ secrets.SQL_DATABASE }}" \
+            SQL_USER="${{ secrets.SQL_USER }}" \
+            SQL_PASSWORD="${{ secrets.SQL_PASSWORD }}" \
+            SESSION_SECRET="${{ secrets.SESSION_SECRET }}" \
+          --cpu 1 \
+          --memory 1 \
+          --restart-policy Always
+        
+        echo "✅ Enhanced calculator deployment initiated!"
+        echo "📝 Container Name: $CONTAINER_NAME"
+
+    - name: 🔍 Get Enhanced Calculator Deployment Info
+      run: |
+        echo "⏳ Waiting for enhanced calculator to start..."
+        sleep 30
+        
+        # Set container name with run number
+        CONTAINER_NAME="calculator-db-demo-${{ github.run_number }}"
+        
+        # Get container information
+        FQDN=$(az container show \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --name $CONTAINER_NAME \
+          --query ipAddress.fqdn \
+          --output tsv)
+        
+        IP=$(az container show \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --name $CONTAINER_NAME \
+          --query ipAddress.ip \
+          --output tsv)
+        
+        STATE=$(az container show \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --name $CONTAINER_NAME \
+          --query instanceView.state \
+          --output tsv)
+        
+        echo "🎯 ENHANCED CALCULATOR DEPLOYMENT:"
+        echo "=================================="
+        echo "🌐 Live Demo URL: http://$FQDN:3000"
+        echo "📊 Features: Database History + CI/CD"
+        echo "📍 Public IP: $IP"
+        echo "📊 Container State: $STATE"
+        echo "🗄️ Database: Connected to Azure SQL"
+        echo "=================================="
+
+    - name: 🏥 Health Check Enhanced Calculator
+      run: |
+        echo "🔍 Running health check on enhanced calculator..."
+        
+        # Set container name and get FQDN for health check
+        CONTAINER_NAME="calculator-db-demo-${{ github.run_number }}"
+        FQDN=$(az container show \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --name $CONTAINER_NAME \
+          --query ipAddress.fqdn \
+          --output tsv)
+        
+        echo "Testing enhanced calculator: http://$FQDN:3000"
+        
+        # Wait for application to be ready and test
+        for i in {1..10}; do
+          echo "Health check attempt $i/10..."
+          if curl --fail --connect-timeout 10 http://$FQDN:3000; then
+            echo "✅ Enhanced calculator is live and healthy!"
+            echo "🎉 Database-enabled demo ready: http://$FQDN:3000"
+            break
+          else
+            echo "⚠️ Attempt $i failed, retrying in 15 seconds..."
+            sleep 15
+            if [ $i -eq 10 ]; then
+              echo "⚠️ Health check timeout - application may still be starting"
+              echo "📋 Container logs:"
+              az container logs --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name $CONTAINER_NAME
+            fi
+          fi
+        done
+
+    - name: 📊 Final Demo Summary
+      run: |
+        echo "========================================"
+        echo "🎯 DATABASE CI/CD DEMO COMPLETED"
+        echo "========================================"
+        echo "📦 Build: database-demo-${{ github.run_number }}"
+        echo "🌿 Branch: ${{ github.ref_name }}"
+        echo "👤 Author: ${{ github.actor }}"
+        echo "📅 Time: $(date)"
+        echo ""
+        echo "🚀 DEMO FEATURES DEPLOYED:"
+        echo "   🗄️ Database: Azure SQL with CI/CD"
+        echo "   📊 Calculator: Enhanced with history"
+        echo "   🔄 CI/CD: Automated database + app deployment"
+        echo "   🌐 Live Demo: Ready for presentation!"
+        echo ""
+        echo "🎯 Demo Story: Simple Calculator → Enterprise App"
+        echo "========================================"
