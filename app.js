@@ -1,4 +1,5 @@
 const express = require('express');
+const { calculate } = require('./calculator');
 const app = express();
 const port = 3000;
 
@@ -22,20 +23,21 @@ app.get('/', (req, res) => {
 });
 
 app.post('/calculate', (req, res) => {
-  const num1 = parseFloat(req.body.num1);
-  const num2 = parseFloat(req.body.num2);
+  const num1 = req.body.num1;
+  const num2 = req.body.num2;
   const op = req.body.op;
-  let result;
-  switch (op) {
-    case '+': result = num1 + num2; break;
-    case '-': result = num1 - num2; break;
-    case '*': result = num1 * num2; break;
-    case '/': result = num2 !== 0 ? num1 / num2 : 'Infinity'; break;
-    default: result = 'Invalid operation';
+  
+  const result = calculate(num1, num2, op);
+  
+  if (result.success) {
+    res.send(`<h2>Result: ${result.result}</h2><a href="/">Try again</a>`);
+  } else {
+    res.send(`<h2>Error: ${result.error}</h2><a href="/">Try again</a>`);
   }
-  res.send(`<h2>Result: ${result}</h2><a href="/">Try again</a>`);
 });
 
 app.listen(port, () => {
   console.log(`Calculator app listening at http://localhost:${port}`);
 });
+
+module.exports = app;
