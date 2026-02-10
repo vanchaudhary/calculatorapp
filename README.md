@@ -3,6 +3,10 @@
 A basic calculator web application built with Node.js and Express.  
 It supports basic operations: addition, subtraction, multiplication, and division.
 
+## GitHub Advanced Security demo
+
+This repository stays intentionally small so it can be used to demo GitHub Advanced Security features like code scanning, secret scanning, and dependency review.
+
 ## Features
 
 - Add, subtract, multiply, or divide two numbers.
