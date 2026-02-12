@@ -5,7 +5,7 @@ const port = 3000;
 
 app.use(express.urlencoded({ extended: true }));
 
-app.get('/', (req, res) => {
+app.get('/', (req, res,) => {
   res.send(`
     <h2>🚀 Calculator App - Azure Demo v2.0 ✨</h2>
     <form method="post" action="/calculate">
