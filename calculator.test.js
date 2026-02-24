@@ -21,7 +21,7 @@ describe('Calculator Module', () => {
       expect(isValidNumber(NaN)).toBe(false);
     });
 
-    test('should return false for Infinity', () => {
+    test('should return false for Infinity and -Infinity values', () => {
       expect(isValidNumber(Infinity)).toBe(false);
       expect(isValidNumber(-Infinity)).toBe(false);
       expect(isValidNumber('Infinity')).toBe(false);
@@ -172,10 +172,46 @@ describe('Calculator Module', () => {
         expect(result.result).toBe(1000000000000);
       });
 
-      test('should handle very small decimal numbers', () => {
+      test('should handle very large numbers in subtraction', () => {
+        const result = calculate('1000000000000', '1', '-');
+        expect(result.success).toBe(true);
+        expect(result.result).toBe(999999999999);
+      });
+
+      test('should handle very large numbers in multiplication', () => {
+        const result = calculate('1000000', '1000', '*');
+        expect(result.success).toBe(true);
+        expect(result.result).toBe(1000000000);
+      });
+
+      test('should handle very large numbers in division', () => {
+        const result = calculate('1000000000000', '1000', '/');
+        expect(result.success).toBe(true);
+        expect(result.result).toBe(1000000000);
+      });
+
+      test('should handle very small decimal numbers in addition', () => {
         const result = calculate('0.0001', '0.0002', '+');
         expect(result.success).toBe(true);
         expect(result.result).toBeCloseTo(0.0003);
+      });
+
+      test('should handle very small decimal numbers in subtraction', () => {
+        const result = calculate('0.0003', '0.0001', '-');
+        expect(result.success).toBe(true);
+        expect(result.result).toBeCloseTo(0.0002);
+      });
+
+      test('should handle very small decimal numbers in multiplication', () => {
+        const result = calculate('0.0001', '0.001', '*');
+        expect(result.success).toBe(true);
+        expect(result.result).toBeCloseTo(0.0000001);
+      });
+
+      test('should handle very small decimal numbers in division', () => {
+        const result = calculate('0.0004', '0.0002', '/');
+        expect(result.success).toBe(true);
+        expect(result.result).toBeCloseTo(2);
       });
 
       test('should handle negative zero', () => {
