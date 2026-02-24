@@ -20,6 +20,12 @@ describe('Calculator Module', () => {
       expect(isValidNumber('abc')).toBe(false);
       expect(isValidNumber(NaN)).toBe(false);
     });
+
+    test('should return false for Infinity', () => {
+      expect(isValidNumber(Infinity)).toBe(false);
+      expect(isValidNumber(-Infinity)).toBe(false);
+      expect(isValidNumber('Infinity')).toBe(false);
+    });
   });
 
   describe('calculate', () => {
@@ -126,6 +132,56 @@ describe('Calculator Module', () => {
         const result = calculate('5', '3', '%');
         expect(result.success).toBe(false);
         expect(result.error).toBe('Invalid operation');
+      });
+
+      test('should return error for null operator', () => {
+        const result = calculate('5', '3', null);
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Invalid operation');
+      });
+
+      test('should return error for undefined operator', () => {
+        const result = calculate('5', '3', undefined);
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Invalid operation');
+      });
+
+      test('should return error for null num1', () => {
+        const result = calculate(null, '5', '+');
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Invalid input: Please provide valid numbers');
+      });
+
+      test('should return error for undefined num1', () => {
+        const result = calculate(undefined, '5', '+');
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Invalid input: Please provide valid numbers');
+      });
+
+      test('should return error for undefined num2', () => {
+        const result = calculate('5', undefined, '+');
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Invalid input: Please provide valid numbers');
+      });
+    });
+
+    describe('Edge Cases', () => {
+      test('should handle very large numbers in addition', () => {
+        const result = calculate('999999999999', '1', '+');
+        expect(result.success).toBe(true);
+        expect(result.result).toBe(1000000000000);
+      });
+
+      test('should handle very small decimal numbers', () => {
+        const result = calculate('0.0001', '0.0002', '+');
+        expect(result.success).toBe(true);
+        expect(result.result).toBeCloseTo(0.0003);
+      });
+
+      test('should handle negative zero', () => {
+        const result = calculate('-0', '5', '+');
+        expect(result.success).toBe(true);
+        expect(result.result).toBe(5);
       });
     });
   });

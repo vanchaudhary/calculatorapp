@@ -147,5 +147,45 @@ describe('Calculator App Routes', () => {
       expect(response.status).toBe(200);
       expect(response.text).toContain('Error: Invalid input');
     });
+
+    test('should handle invalid operator', async () => {
+      const response = await request(app)
+        .post('/calculate')
+        .type('form')
+        .send({ num1: '5', num2: '3', op: '%' });
+      
+      expect(response.status).toBe(200);
+      expect(response.text).toContain('Error: Invalid operation');
+    });
+
+    test('should handle missing num1 parameter', async () => {
+      const response = await request(app)
+        .post('/calculate')
+        .type('form')
+        .send({ num2: '5', op: '+' });
+      
+      expect(response.status).toBe(200);
+      expect(response.text).toContain('Error: Invalid input');
+    });
+
+    test('should handle missing num2 parameter', async () => {
+      const response = await request(app)
+        .post('/calculate')
+        .type('form')
+        .send({ num1: '5', op: '+' });
+      
+      expect(response.status).toBe(200);
+      expect(response.text).toContain('Error: Invalid input');
+    });
+
+    test('should handle missing operator parameter', async () => {
+      const response = await request(app)
+        .post('/calculate')
+        .type('form')
+        .send({ num1: '5', num2: '3' });
+      
+      expect(response.status).toBe(200);
+      expect(response.text).toContain('Error: Invalid operation');
+    });
   });
 });
