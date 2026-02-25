@@ -1,5 +1,10 @@
 trigger: none
 
+parameters:
+- name: workItemIds
+  type: string
+  default: ''   # example: "75" or "75,76,81"
+
 pool:
   vmImage: ubuntu-latest
 
@@ -13,4 +18,4 @@ steps:
         -H "Accept: application/vnd.github+json" \
         -H "Authorization: token $(GITHUB_PAT)" \
         https://api.github.com/repos/vanchaudhary/calculatorapp/actions/workflows/ghas-manual-code-scan.yml/dispatches \
-        -d '{"ref":"main"}'
+        -d '{"ref":"main","inputs":{"workItemIds":"${{ parameters.workItemIds }}"}}'
