@@ -2,6 +2,13 @@ name: GHAS Demo – Manual Trigger
 
 on:
   workflow_dispatch:
+    inputs:
+      workItemIds:
+        description: "Azure DevOps Work Item IDs (comma-separated)"
+        required: false
+        default: ""
+
+run-name: GHAS scan (WIs: ${{ inputs.workItemIds || 'none' }}) by @${{ github.actor }}
 
 jobs:
   analyze:
@@ -16,9 +23,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [ 'javascript' ]  # adjust based on your repo
+        language: [ 'javascript' ]
 
     steps:
+      - name: Show Work Item IDs
+        run: echo "Triggered for Work Items: ${{ inputs.workItemIds }}"
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
