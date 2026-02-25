@@ -1,0 +1,14 @@
+name: GHAS Demo – Manual Trigger
+
+on:
+  workflow_dispatch:
+
+jobs:
+  sanity-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Sanity check
+        run: echo "GitHub Actions is working 🚀"
