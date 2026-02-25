@@ -19,7 +19,8 @@ jobs:
 
     steps:
       - name: Show triggering Work Item
-        run: echo "Triggered from ADO Work Item ID: ${{ inputs.workItemId }}"
+        run: |
+          echo "Triggered from ADO Work Item ID: ${{ github.event.inputs.workItemId }}"
 
       - name: Checkout repository
         uses: actions/checkout@v4
