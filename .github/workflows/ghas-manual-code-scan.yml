@@ -8,7 +8,7 @@ on:
         required: false
         default: ""
 
-un-name: GHAS scan (WIs: ${{ inputs.workItemIds || 'none' }}) by @${{ github.actor }}
+run-name: GHAS scan (WIs: ${{ inputs.workItemIds || 'none' }}) by @${{ github.actor }}
 
 jobs:
   analyze:
