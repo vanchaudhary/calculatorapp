@@ -10,17 +10,22 @@ pool:
 
 steps:
 - task: Bash@3
-  displayName: Trigger GitHub GHAS Workflow
+  displayName: "Add GHAS scan comment to ADO work item"
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
   inputs:
     targetType: inline
     script: |
-      curl -X POST \
-        -H "Accept: application/vnd.github+json" \
-        -H "Authorization: token $(GITHUB_PAT)" \
-        https://api.github.com/repos/vanchaudhary/calculatorapp/actions/workflows/ghas-manual-code-scan.yml/dispatches \
-        -d '{
-          "ref": "main",
-          "inputs": {
-            "workItemId": "${{ parameters.workItemIds }}"
+      echo "Adding comment to work item $(workItemId)"
+
+      curl -u :$SYSTEM_ACCESSTOKEN \
+        -X PATCH \
+        -H "Content-Type: application/json-patch+json" \
+        "$(System.CollectionUri)$(System.TeamProject)/_apis/wit/workitems/$(workItemId)?api-version=7.0" \
+        -d '[
+          {
+            "op": "add",
+            "path": "/fields/System.History",
+            "value": "✅ GHAS CodeQL scan triggered by Azure Pipeline run $(Build.BuildNumber). Results available in GitHub Security tab."
           }
-        }'
+        ]'
