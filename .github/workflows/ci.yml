@@ -1,212 +1,212 @@
-name: Enhanced CI/CD - Deploy to Azure Container Registry
+# name: Enhanced CI/CD - Deploy to Azure Container Registry
 
-on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main ]
+# on:
+#   push:
+#     branches: [ main, develop ]
+#   pull_request:
+#     branches: [ main ]
 
-permissions:
-  contents: read
+# permissions:
+#   contents: read
 
-env:
-  APP_NAME: calculator-app
-  AZURE_CONTAINER_REGISTRY: calculatorappacr
-  AZURE_RESOURCE_GROUP: calculator-app-rg
-  CONTAINER_NAME: calculator-app
-  IMAGE_TAG: ${{ github.sha }}
+# env:
+#   APP_NAME: calculator-app
+#   AZURE_CONTAINER_REGISTRY: calculatorappacr
+#   AZURE_RESOURCE_GROUP: calculator-app-rg
+#   CONTAINER_NAME: calculator-app
+#   IMAGE_TAG: ${{ github.sha }}
 
-jobs:
-  ci-cd-pipeline:
-    runs-on: ubuntu-latest
+# jobs:
+#   ci-cd-pipeline:
+#     runs-on: ubuntu-latest
     
-    steps:
-    # ========== CI PHASE ==========
-    - name: 📥 Checkout Code
-      uses: actions/checkout@v4
+#     steps:
+#     # ========== CI PHASE ==========
+#     - name: 📥 Checkout Code
+#       uses: actions/checkout@v4
 
-    - name: 🏗️ Build Docker Image
-      run: |
-        echo "🔨 Building Docker image with tag: ${{ env.IMAGE_TAG }}"
-        docker build -t ${{ env.CONTAINER_NAME }}:${{ env.IMAGE_TAG }} .
-        docker build -t ${{ env.CONTAINER_NAME }}:latest .
-        echo "✅ Build completed successfully"
+#     - name: 🏗️ Build Docker Image
+#       run: |
+#         echo "🔨 Building Docker image with tag: ${{ env.IMAGE_TAG }}"
+#         docker build -t ${{ env.CONTAINER_NAME }}:${{ env.IMAGE_TAG }} .
+#         docker build -t ${{ env.CONTAINER_NAME }}:latest .
+#         echo "✅ Build completed successfully"
 
-    - name: 🧪 Run Automated Tests
-      run: |
-        echo "🧪 Starting automated testing..."
+#     - name: 🧪 Run Automated Tests
+#       run: |
+#         echo "🧪 Starting automated testing..."
         
-        # Start test container
-        docker run -d -p 3001:3000 --name test-container ${{ env.CONTAINER_NAME }}:latest
+#         # Start test container
+#         docker run -d -p 3001:3000 --name test-container ${{ env.CONTAINER_NAME }}:latest
         
-        # Wait for app to start
-        echo "⏳ Waiting for application to start..."
-        sleep 10
+#         # Wait for app to start
+#         echo "⏳ Waiting for application to start..."
+#         sleep 10
         
-        # Run health check
-        echo "🔍 Running health checks..."
-        curl --fail --retry 3 --retry-delay 2 http://localhost:3001 || {
-          echo "❌ Health check failed"
-          docker logs test-container
-          exit 1
-        }
+#         # Run health check
+#         echo "🔍 Running health checks..."
+#         curl --fail --retry 3 --retry-delay 2 http://localhost:3001 || {
+#           echo "❌ Health check failed"
+#           docker logs test-container
+#           exit 1
+#         }
         
-        echo "✅ All tests passed!"
+#         echo "✅ All tests passed!"
         
-        # Cleanup test container
-        docker stop test-container
-        docker rm test-container
+#         # Cleanup test container
+#         docker stop test-container
+#         docker rm test-container
 
-    # ========== AZURE ACR DEPLOYMENT ==========
-    - name: 🔑 Azure Login
-      if: github.ref == 'refs/heads/main'
-      uses: azure/login@v1
-      with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
+#     # ========== AZURE ACR DEPLOYMENT ==========
+#     - name: 🔑 Azure Login
+#       if: github.ref == 'refs/heads/main'
+#       uses: azure/login@v1
+#       with:
+#         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-    - name: 🏭 Login to Azure Container Registry
-      if: github.ref == 'refs/heads/main'
-      run: |
-        echo "🔐 Logging into Azure Container Registry..."
-        az acr login --name ${{ env.AZURE_CONTAINER_REGISTRY }}
-        echo "✅ ACR login successful"
+#     - name: 🏭 Login to Azure Container Registry
+#       if: github.ref == 'refs/heads/main'
+#       run: |
+#         echo "🔐 Logging into Azure Container Registry..."
+#         az acr login --name ${{ env.AZURE_CONTAINER_REGISTRY }}
+#         echo "✅ ACR login successful"
 
-    - name: 🚀 Build and Push to ACR
-      if: github.ref == 'refs/heads/main'
-      run: |
-        echo "📦 Tagging and pushing images to ACR..."
+#     - name: 🚀 Build and Push to ACR
+#       if: github.ref == 'refs/heads/main'
+#       run: |
+#         echo "📦 Tagging and pushing images to ACR..."
         
-        # Tag images for ACR
-        docker tag ${{ env.CONTAINER_NAME }}:latest ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:latest
-        docker tag ${{ env.CONTAINER_NAME }}:latest ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:${{ env.IMAGE_TAG }}
+#         # Tag images for ACR
+#         docker tag ${{ env.CONTAINER_NAME }}:latest ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:latest
+#         docker tag ${{ env.CONTAINER_NAME }}:latest ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:${{ env.IMAGE_TAG }}
         
-        # Push to ACR
-        docker push ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:latest
-        docker push ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:${{ env.IMAGE_TAG }}
+#         # Push to ACR
+#         docker push ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:latest
+#         docker push ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:${{ env.IMAGE_TAG }}
         
-        echo "✅ Images pushed to ACR successfully!"
-        echo "🏭 ACR Registry: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io"
-        echo "📦 Image: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:latest"
+#         echo "✅ Images pushed to ACR successfully!"
+#         echo "🏭 ACR Registry: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io"
+#         echo "📦 Image: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:latest"
 
-    # ========== AZURE CONTAINER INSTANCES DEPLOYMENT ==========
-    - name: 🌐 Deploy to Azure Container Instances
-      if: github.ref == 'refs/heads/main'
-      run: |
-        echo "🚀 Deploying to Azure Container Instances..."
+#     # ========== AZURE CONTAINER INSTANCES DEPLOYMENT ==========
+#     - name: 🌐 Deploy to Azure Container Instances
+#       if: github.ref == 'refs/heads/main'
+#       run: |
+#         echo "🚀 Deploying to Azure Container Instances..."
         
-        # Create container instance with unique name using run number
-        CONTAINER_NAME="calculator-demo-${{ github.run_number }}"
-        DNS_LABEL="calculator-demo-${{ github.run_number }}"
+#         # Create container instance with unique name using run number
+#         CONTAINER_NAME="calculator-demo-${{ github.run_number }}"
+#         DNS_LABEL="calculator-demo-${{ github.run_number }}"
         
-        echo "📦 Creating container: $CONTAINER_NAME"
-        echo "🌐 DNS Label: $DNS_LABEL"
+#         echo "📦 Creating container: $CONTAINER_NAME"
+#         echo "🌐 DNS Label: $DNS_LABEL"
         
-        az container create \
-          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-          --name $CONTAINER_NAME \
-          --image ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:latest \
-          --registry-login-server ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io \
-          --registry-username ${{ env.AZURE_CONTAINER_REGISTRY }} \
-          --registry-password ${{ secrets.ACR_PASSWORD }} \
-          --dns-name-label $DNS_LABEL \
-          --ports 3000 \
-          --os-type Linux \
-          --environment-variables PORT=3000 \
-          --cpu 1 \
-          --memory 1 \
-          --restart-policy Always
+#         az container create \
+#           --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+#           --name $CONTAINER_NAME \
+#           --image ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:latest \
+#           --registry-login-server ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io \
+#           --registry-username ${{ env.AZURE_CONTAINER_REGISTRY }} \
+#           --registry-password ${{ secrets.ACR_PASSWORD }} \
+#           --dns-name-label $DNS_LABEL \
+#           --ports 3000 \
+#           --os-type Linux \
+#           --environment-variables PORT=3000 \
+#           --cpu 1 \
+#           --memory 1 \
+#           --restart-policy Always
         
-        echo "✅ Container deployment initiated!"
-        echo "📝 Container Name: $CONTAINER_NAME"
+#         echo "✅ Container deployment initiated!"
+#         echo "📝 Container Name: $CONTAINER_NAME"
 
-    - name: 🔍 Get Deployment Information
-      if: github.ref == 'refs/heads/main'
-      run: |
-        echo "⏳ Waiting for container to start..."
-        sleep 30
+#     - name: 🔍 Get Deployment Information
+#       if: github.ref == 'refs/heads/main'
+#       run: |
+#         echo "⏳ Waiting for container to start..."
+#         sleep 30
         
-        # Set container name with run number
-        CONTAINER_NAME="calculator-demo-${{ github.run_number }}"
+#         # Set container name with run number
+#         CONTAINER_NAME="calculator-demo-${{ github.run_number }}"
         
-        # Get container information
-        FQDN=$(az container show \
-          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-          --name $CONTAINER_NAME \
-          --query ipAddress.fqdn \
-          --output tsv)
+#         # Get container information
+#         FQDN=$(az container show \
+#           --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+#           --name $CONTAINER_NAME \
+#           --query ipAddress.fqdn \
+#           --output tsv)
         
-        IP=$(az container show \
-          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-          --name $CONTAINER_NAME \
-          --query ipAddress.ip \
-          --output tsv)
+#         IP=$(az container show \
+#           --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+#           --name $CONTAINER_NAME \
+#           --query ipAddress.ip \
+#           --output tsv)
         
-        STATE=$(az container show \
-          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-          --name $CONTAINER_NAME \
-          --query instanceView.state \
-          --output tsv)
+#         STATE=$(az container show \
+#           --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+#           --name $CONTAINER_NAME \
+#           --query instanceView.state \
+#           --output tsv)
         
-        echo "🎯 DEPLOYMENT INFORMATION:"
-        echo "=================================="
-        echo "🌐 Live URL: http://$FQDN:3000"
-        echo "📍 Public IP: $IP"
-        echo "📊 Container State: $STATE"
-        echo "🏭 ACR Image: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:latest"
-        echo "=================================="
+#         echo "🎯 DEPLOYMENT INFORMATION:"
+#         echo "=================================="
+#         echo "🌐 Live URL: http://$FQDN:3000"
+#         echo "📍 Public IP: $IP"
+#         echo "📊 Container State: $STATE"
+#         echo "🏭 ACR Image: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:latest"
+#         echo "=================================="
 
-    - name: 🏥 Health Check Deployed Application
-      if: github.ref == 'refs/heads/main'
-      run: |
-        echo "🔍 Running health check on deployed application..."
+#     - name: 🏥 Health Check Deployed Application
+#       if: github.ref == 'refs/heads/main'
+#       run: |
+#         echo "🔍 Running health check on deployed application..."
         
-        # Set container name and get FQDN for health check
-        CONTAINER_NAME="calculator-demo-${{ github.run_number }}"
-        FQDN=$(az container show \
-          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-          --name $CONTAINER_NAME \
-          --query ipAddress.fqdn \
-          --output tsv)
+#         # Set container name and get FQDN for health check
+#         CONTAINER_NAME="calculator-demo-${{ github.run_number }}"
+#         FQDN=$(az container show \
+#           --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+#           --name $CONTAINER_NAME \
+#           --query ipAddress.fqdn \
+#           --output tsv)
         
-        echo "Testing: http://$FQDN:3000"
+#         echo "Testing: http://$FQDN:3000"
         
-        # Wait for application to be ready and test
-        for i in {1..10}; do
-          echo "Health check attempt $i/10..."
-          if curl --fail --connect-timeout 10 http://$FQDN:3000; then
-            echo "✅ Application is live and healthy!"
-            echo "🎉 Demo URL ready: http://$FQDN:3000"
-            break
-          else
-            echo "⚠️ Attempt $i failed, retrying in 15 seconds..."
-            sleep 15
-            if [ $i -eq 10 ]; then
-              echo "⚠️ Health check timeout - application may still be starting"
-              echo "📋 Container logs:"
-              az container logs --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name $CONTAINER_NAME
-            fi
-          fi
-        done
+#         # Wait for application to be ready and test
+#         for i in {1..10}; do
+#           echo "Health check attempt $i/10..."
+#           if curl --fail --connect-timeout 10 http://$FQDN:3000; then
+#             echo "✅ Application is live and healthy!"
+#             echo "🎉 Demo URL ready: http://$FQDN:3000"
+#             break
+#           else
+#             echo "⚠️ Attempt $i failed, retrying in 15 seconds..."
+#             sleep 15
+#             if [ $i -eq 10 ]; then
+#               echo "⚠️ Health check timeout - application may still be starting"
+#               echo "📋 Container logs:"
+#               az container logs --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name $CONTAINER_NAME
+#             fi
+#           fi
+#         done
 
-    - name: 📊 Final Deployment Summary
-      if: always()
-      run: |
-        echo "========================================"
-        echo "🎯 CI/CD PIPELINE COMPLETED"
-        echo "========================================"
-        echo "📦 Build: ${{ env.IMAGE_TAG }}"
-        echo "🌿 Branch: ${{ github.ref_name }}"
-        echo "👤 Author: ${{ github.actor }}"
-        echo "📅 Time: $(date)"
-        echo ""
+#     - name: 📊 Final Deployment Summary
+#       if: always()
+#       run: |
+#         echo "========================================"
+#         echo "🎯 CI/CD PIPELINE COMPLETED"
+#         echo "========================================"
+#         echo "📦 Build: ${{ env.IMAGE_TAG }}"
+#         echo "🌿 Branch: ${{ github.ref_name }}"
+#         echo "👤 Author: ${{ github.actor }}"
+#         echo "📅 Time: $(date)"
+#         echo ""
         
-        if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-          echo "🚀 PRODUCTION DEPLOYMENT:"
-          echo "   🏭 Azure Container Registry: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io"
-          echo "   📦 Image: ${{ env.CONTAINER_NAME }}:latest"
-          echo "   🌐 Live Demo: Check deployment information above"
-          echo "   🎯 Ready for client presentation!"
-        else
-          echo "🧪 Testing completed for development branch"
-        fi
-        echo "========================================"
+#         if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+#           echo "🚀 PRODUCTION DEPLOYMENT:"
+#           echo "   🏭 Azure Container Registry: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io"
+#           echo "   📦 Image: ${{ env.CONTAINER_NAME }}:latest"
+#           echo "   🌐 Live Demo: Check deployment information above"
+#           echo "   🎯 Ready for client presentation!"
+#         else
+#           echo "🧪 Testing completed for development branch"
+#         fi
+#         echo "========================================"
