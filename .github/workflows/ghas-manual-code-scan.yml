@@ -19,14 +19,19 @@ jobs:
 
     steps:
       - name: Echo Work Item IDs
-        run: echo "Triggered from ADO Work Item IDs: ${{ github.event.inputs.workItemIds }}"
+        run: |
+          echo "Triggered from ADO Work Item IDs: ${{ github.event.inputs.workItemIds }}"
 
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: github/codeql-action/init@v3
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
         with:
           languages: javascript
 
-      - uses: github/codeql-action/autobuild@v3
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
 
-      - uses: github/codeql-action/analyze@v3
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
