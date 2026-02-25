@@ -10,22 +10,58 @@ pool:
 
 steps:
 - task: Bash@3
-  displayName: "Add GHAS scan comment to ADO work item"
-  env:
-    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+  displayName: Trigger GitHub GHAS Workflow
   inputs:
     targetType: inline
     script: |
-      echo "Adding comment to work item $(workItemId)"
-
-      curl -u :$SYSTEM_ACCESSTOKEN \
-        -X PATCH \
-        -H "Content-Type: application/json-patch+json" \
-        "$(System.CollectionUri)$(System.TeamProject)/_apis/wit/workitems/$(workItemId)?api-version=7.0" \
-        -d '[
-          {
-            "op": "add",
-            "path": "/fields/System.History",
-            "value": "✅ GHAS CodeQL scan triggered by Azure Pipeline run $(Build.BuildNumber). Results available in GitHub Security tab."
+      curl -X POST \
+        -H "Accept: application/vnd.github+json" \
+        -H "Authorization: token $(GITHUB_PAT)" \
+        https://api.github.com/repos/vanchaudhary/calculatorapp/actions/workflows/ghas-manual-code-scan.yml/dispatches \
+        -d '{
+          "ref": "main",
+          "inputs": {
+            "workItemIds": "${{ parameters.workItemIds }}"
           }
-        ]'
+        }'
+
+# Light automation: write an audit comment back to the ADO work item(s)
+- task: Bash@3
+  displayName: "Add GHAS scan comment to ADO work item(s)"
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+    WORK_ITEM_IDS: ${{ parameters.workItemIds }}
+  inputs:
+    targetType: inline
+    script: |
+      set -e
+      echo "Work item IDs received: '$WORK_ITEM_IDS'"
+
+      if [ -z "$WORK_ITEM_IDS" ]; then
+        echo "No work item IDs provided. Skipping comment update."
+        exit 0
+      fi
+
+      # Convert "75,76,81" -> "75 76 81"
+      IDS=$(echo "$WORK_ITEM_IDS" | tr ',' ' ')
+
+      for ID in $IDS; do
+        ID=$(echo "$ID" | xargs)   # trim spaces
+        if [ -z "$ID" ]; then
+          continue
+        fi
+
+        echo "Adding comment to work item ID: $ID"
+
+        curl -sS -u :$SYSTEM_ACCESSTOKEN \
+          -X PATCH \
+          -H "Content-Type: application/json-patch+json" \
+          "$(System.CollectionUri)$(System.TeamProject)/_apis/wit/workitems/$ID?api-version=7.0" \
+          -d "[
+            {
+              \"op\": \"add\",
+              \"path\": \"/fields/System.History\",
+              \"value\": \"✅ GHAS CodeQL scan triggered by Azure Pipeline run $(Build.BuildNumber). Results available in GitHub Security tab.\"
+            }
+          ]"
+      done
