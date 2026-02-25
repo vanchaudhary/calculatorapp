@@ -1,0 +1,16 @@
+trigger: none
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+- task: Bash@3
+  displayName: Trigger GitHub GHAS Workflow
+  inputs:
+    targetType: inline
+    script: |
+      curl -X POST \
+        -H "Accept: application/vnd.github+json" \
+        -H "Authorization: token $(GITHUB_PAT)" \
+        https://api.github.com/repos/vanchaudhary/calculatorapp/actions/workflows/ghas-manual-code-scan.yml/dispatches \
+        -d '{"ref":"main"}'
