@@ -18,4 +18,9 @@ steps:
         -H "Accept: application/vnd.github+json" \
         -H "Authorization: token $(GITHUB_PAT)" \
         https://api.github.com/repos/vanchaudhary/calculatorapp/actions/workflows/ghas-manual-code-scan.yml/dispatches \
-        -d '{"ref":"main","inputs":{"workItemIds":"${{ parameters.workItemIds }}"}}'
+        -d '{
+          "ref": "main",
+          "inputs": {
+            "workItemId": "${{ parameters.workItemIds }}"
+          }
+        }'
