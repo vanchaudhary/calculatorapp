@@ -1,0 +1,14 @@
+{
+  "name": "api-demo",
+  "version": "1.0.0",
+  "description": "A simple REST API demo using Node.js and Express.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "express": "^4.17.1"
+  },
+  "author": "",
+  "license": "ISC"
+}

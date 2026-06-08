@@ -52,6 +52,10 @@ calculatorapp/
 └── README.md
 ```
 
+## Architecture
+
+- High-Level Design (HLD): [docs/architecture/hld-cdc-iceberg.md](docs/architecture/hld-cdc-iceberg.md)
+
 ## License
 
 MIT
