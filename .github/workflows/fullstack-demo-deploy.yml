@@ -9,6 +9,10 @@ env:
   AZURE_CONTAINER_REGISTRY: calculatorappacr
   AZURE_RESOURCE_GROUP: calculator-app-rg
   CONTAINER_NAME: calculator-app
+  DEPLOY_CONTAINER_NAME: calculator-db-demo
+  DEPLOY_DNS_LABEL: calculator-demo-8
+  AZURE_SQL_SERVER: calculator-sql-server-vc.database.windows.net
+  AZURE_SQL_DATABASE: calculator
   IMAGE_TAG: ${{ github.sha }}
 
 jobs:
@@ -36,12 +40,68 @@ jobs:
         
         # Add sqlcmd to PATH
         export PATH="$PATH:/opt/mssql-tools/bin"
+
+        # Extract service principal credentials from AZURE_CREDENTIALS
+        AZURE_CLIENT_ID=$(echo '${{ secrets.AZURE_CREDENTIALS }}' | jq -r '.clientId')
+        AZURE_CLIENT_SECRET=$(echo '${{ secrets.AZURE_CREDENTIALS }}' | jq -r '.clientSecret')
+        if [ -z "$AZURE_CLIENT_ID" ] || [ "$AZURE_CLIENT_ID" = "null" ] || [ -z "$AZURE_CLIENT_SECRET" ] || [ "$AZURE_CLIENT_SECRET" = "null" ]; then
+          echo "❌ Unable to parse clientId/clientSecret from AZURE_CREDENTIALS"
+          exit 1
+        fi
         
+        # Use Azure AD authentication (AAD-only SQL server)
+        SQL_AUTH_ARGS="-G -U $AZURE_CLIENT_ID -P $AZURE_CLIENT_SECRET"
+
+        # Ensure GitHub Actions service principal exists and has required DB permissions
+        /opt/mssql-tools/bin/sqlcmd -S ${{ env.AZURE_SQL_SERVER }} \
+          -d ${{ env.AZURE_SQL_DATABASE }} \
+          $SQL_AUTH_ARGS \
+          -Q "
+          IF NOT EXISTS (SELECT * FROM sys.database_principals WHERE name = '$AZURE_CLIENT_ID')
+          BEGIN
+              EXEC('CREATE USER [$AZURE_CLIENT_ID] FROM EXTERNAL PROVIDER');
+              PRINT 'Created AAD user for GitHub Actions service principal';
+          END
+          ELSE
+          BEGIN
+              PRINT 'AAD user already exists for GitHub Actions service principal';
+          END;
+
+          IF NOT EXISTS (
+              SELECT 1 FROM sys.database_role_members rm
+              JOIN sys.database_principals r ON rm.role_principal_id = r.principal_id
+              JOIN sys.database_principals m ON rm.member_principal_id = m.principal_id
+              WHERE r.name = 'db_ddladmin' AND m.name = '$AZURE_CLIENT_ID'
+          )
+          BEGIN
+              EXEC('ALTER ROLE [db_ddladmin] ADD MEMBER [$AZURE_CLIENT_ID]');
+          END;
+
+          IF NOT EXISTS (
+              SELECT 1 FROM sys.database_role_members rm
+              JOIN sys.database_principals r ON rm.role_principal_id = r.principal_id
+              JOIN sys.database_principals m ON rm.member_principal_id = m.principal_id
+              WHERE r.name = 'db_datareader' AND m.name = '$AZURE_CLIENT_ID'
+          )
+          BEGIN
+              EXEC('ALTER ROLE [db_datareader] ADD MEMBER [$AZURE_CLIENT_ID]');
+          END;
+
+          IF NOT EXISTS (
+              SELECT 1 FROM sys.database_role_members rm
+              JOIN sys.database_principals r ON rm.role_principal_id = r.principal_id
+              JOIN sys.database_principals m ON rm.member_principal_id = m.principal_id
+              WHERE r.name = 'db_datawriter' AND m.name = '$AZURE_CLIENT_ID'
+          )
+          BEGIN
+              EXEC('ALTER ROLE [db_datawriter] ADD MEMBER [$AZURE_CLIENT_ID]');
+          END;
+          "
+         
         # Create database schema
-        /opt/mssql-tools/bin/sqlcmd -S calculator-sql-server-vc.database.windows.net \
-          -d calculator \
-          -U sqladmin \
-          -P '${{ secrets.AZURE_SQL_PASSWORD }}' \
+        /opt/mssql-tools/bin/sqlcmd -S ${{ env.AZURE_SQL_SERVER }} \
+          -d ${{ env.AZURE_SQL_DATABASE }} \
+          $SQL_AUTH_ARGS \
           -Q "
           IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Users' AND xtype='U')
           BEGIN
@@ -161,12 +221,18 @@ jobs:
       run: |
         echo "🚀 Deploying enhanced calculator with database connectivity..."
         
-        # Create container instance with database environment variables
-        CONTAINER_NAME="calculator-db-demo-${{ github.run_number }}"
-        DNS_LABEL="calculator-db-demo-${{ github.run_number }}"
+        # Use stable naming for predictable endpoint
+        CONTAINER_NAME="${{ env.DEPLOY_CONTAINER_NAME }}"
+        DNS_LABEL="${{ env.DEPLOY_DNS_LABEL }}"
         
         echo "📦 Creating container: $CONTAINER_NAME"
         echo "🌐 DNS Label: $DNS_LABEL"
+
+        # Delete existing deployment if present to keep endpoint stable
+        az container delete \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --name $CONTAINER_NAME \
+          --yes || true
         
         az container create \
           --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
@@ -194,8 +260,7 @@ jobs:
         echo "⏳ Waiting for enhanced calculator to start..."
         sleep 30
         
-        # Set container name with run number
-        CONTAINER_NAME="calculator-db-demo-${{ github.run_number }}"
+        CONTAINER_NAME="${{ env.DEPLOY_CONTAINER_NAME }}"
         
         # Get container information
         FQDN=$(az container show \
@@ -230,7 +295,7 @@ jobs:
         echo "🔍 Running health check on enhanced calculator..."
         
         # Set container name and get FQDN for health check
-        CONTAINER_NAME="calculator-db-demo-${{ github.run_number }}"
+        CONTAINER_NAME="${{ env.DEPLOY_CONTAINER_NAME }}"
         FQDN=$(az container show \
           --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
           --name $CONTAINER_NAME \
@@ -250,9 +315,10 @@ jobs:
             echo "⚠️ Attempt $i failed, retrying in 15 seconds..."
             sleep 15
             if [ $i -eq 10 ]; then
-              echo "⚠️ Health check timeout - application may still be starting"
+              echo "❌ Health check failed - public URL is not reachable"
               echo "📋 Container logs:"
               az container logs --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name $CONTAINER_NAME
+              exit 1
             fi
           fi
         done
