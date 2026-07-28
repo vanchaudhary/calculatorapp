@@ -1,61 +1,42 @@
-# Simple Calculator Web App
+# Calculator App
 
-A basic calculator web application built with Node.js and Express.  
-It supports basic operations: addition, subtraction, multiplication, and division.
+A simple Node.js + Express calculator app with a browser form and server-side computation.
 
 ## Features
 
-- Add, subtract, multiply, or divide two numbers.
-- Friendly web interface.
-- Built with Node.js and Express.
+- Basic arithmetic: `+`, `-`, `*`, `/`
+- Input validation with user-friendly error responses
+- Health endpoint: `GET /healthz`
+- Request and calculation logging
 
-## Installation & Running
+## Setup
 
-1. **Clone the repository**
-
-   ```bash
-   git clone https://github.com/vanchaudhary_microsoft/calculatorapp.git
-   cd calculatorapp
-   ```
-
-2. **Install dependencies**
+1. Install dependencies:
 
    ```bash
-   npm install express body-parser
+   npm install
    ```
 
-3. **Run the application**
+2. Run the app:
 
    ```bash
    node app.js
    ```
 
-4. **Open in your browser**
+3. Open:
 
-   Go to [http://localhost:3000](http://localhost:3000).
+   - App: [http://localhost:3000](http://localhost:3000)
+   - Health: [http://localhost:3000/healthz](http://localhost:3000/healthz)
 
-## Usage
+## Testing
 
-- Enter the first number.
-- Select the desired operation (`+`, `-`, `×`, `÷`).
-- Enter the second number.
-- Click "Calculate" to see the result.
+Run:
 
-## Project Structure
-
-```
-calculatorapp/
-├── app.js
-├── index.html
-├── public/
-│   └── style.css
-└── README.md
+```bash
+npm test
 ```
 
-## Architecture
+## Documentation
 
-- High-Level Design (HLD): [docs/architecture/hld-cdc-iceberg.md](docs/architecture/hld-cdc-iceberg.md)
-
-## License
-
-MIT
+- Implementation details: [IMPLEMENTATION.md](IMPLEMENTATION.md)
+- Documentation index: [DOCUMENTATION.md](DOCUMENTATION.md)

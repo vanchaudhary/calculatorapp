@@ -2,7 +2,7 @@
 
 const express = require('express');
 const app = express();
-const PORTNO = Number(process.env.PORT) || 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 // Basic hardening
 app.disable('x-powered-by');
@@ -125,5 +125,4 @@ app.listen(PORT, () => {
     env: process.env.NODE_ENV || 'development'
   }));
 });
-
 
