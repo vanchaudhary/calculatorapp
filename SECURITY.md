@@ -34,6 +34,7 @@ Before deploying to production:
 - [ ] Enable Azure Key Vault for secret management
 - [ ] Configure proper RBAC permissions
 - [ ] Enable audit logging
+- [ ] 
 - [ ] Set up monitoring and alerting
 
 ---
