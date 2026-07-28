@@ -26,22 +26,24 @@ jobs:
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
     
-    - name: 🗄️ Deploy Database Schema using sqlcmd
+    - name: 🗄️ Deploy Database Schema using Microsoft Entra auth
+      env:
+        AZURE_CLIENT_ID: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientId }}
+        AZURE_CLIENT_SECRET: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientSecret }}
+        AZURE_TENANT_ID: ${{ fromJson(secrets.AZURE_CREDENTIALS).tenantId }}
       run: |
-        # Install sqlcmd
+        # Install sqlcmd (Go)
         curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
         curl https://packages.microsoft.com/config/ubuntu/20.04/prod.list | sudo tee /etc/apt/sources.list.d/msprod.list
         sudo apt-get update
-        sudo ACCEPT_EULA=Y apt-get install -y mssql-tools unixodbc-dev
-        
-        # Add sqlcmd to PATH
-        export PATH="$PATH:/opt/mssql-tools/bin"
+        sudo apt-get install -y sqlcmd
         
         # Create database schema
-        /opt/mssql-tools/bin/sqlcmd -S calculator-sql-server-vc.database.windows.net \
+        sqlcmd -S calculator-sql-server-vc.database.windows.net \
           -d calculator \
-          -U sqladmin \
-          -P '${{ secrets.AZURE_SQL_PASSWORD }}' \
+          --authentication-method ActiveDirectoryServicePrincipal \
+          -U "$AZURE_CLIENT_ID" \
+          -P "$AZURE_CLIENT_SECRET" \
           -Q "
           IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Users' AND xtype='U')
           BEGIN
