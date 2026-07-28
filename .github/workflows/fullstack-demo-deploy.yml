@@ -27,10 +27,6 @@ jobs:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
     
     - name: 🗄️ Deploy Database Schema using Microsoft Entra auth
-      env:
-        AZURE_CLIENT_ID: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientId }}
-        AZURE_CLIENT_SECRET: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientSecret }}
-        AZURE_TENANT_ID: ${{ fromJson(secrets.AZURE_CREDENTIALS).tenantId }}
       run: |
         # Install sqlcmd (Go)
         curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
@@ -41,9 +37,7 @@ jobs:
         # Create database schema
         sqlcmd -S calculator-sql-server-vc.database.windows.net \
           -d calculator \
-          --authentication-method ActiveDirectoryServicePrincipal \
-          -U "$AZURE_CLIENT_ID" \
-          -P "$AZURE_CLIENT_SECRET" \
+          --authentication-method ActiveDirectoryDefault \
           -Q "
           IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Users' AND xtype='U')
           BEGIN
