@@ -1,61 +1,60 @@
-# Simple Calculator Web App
+# Calculator App
 
-A basic calculator web application built with Node.js and Express.  
-It supports basic operations: addition, subtraction, multiplication, and division.
+A small Node.js repository containing:
 
-## Features
+- an Express-based calculator web application;
+- a reusable calculator module with structured logging; and
+- a separate in-memory REST API example under [`api-demo/`](api-demo/).
 
-- Add, subtract, multiply, or divide two numbers.
-- Friendly web interface.
-- Built with Node.js and Express.
+## Quick start
 
-## Installation & Running
+### Prerequisites
 
-1. **Clone the repository**
+- Node.js 18 or later
+- npm
 
-   ```bash
-   git clone https://github.com/vanchaudhary_microsoft/calculatorapp.git
-   cd calculatorapp
-   ```
+### Run the calculator web app
 
-2. **Install dependencies**
-
-   ```bash
-   npm install express body-parser
-   ```
-
-3. **Run the application**
-
-   ```bash
-   node app.js
-   ```
-
-4. **Open in your browser**
-
-   Go to [http://localhost:3000](http://localhost:3000).
-
-## Usage
-
-- Enter the first number.
-- Select the desired operation (`+`, `-`, `×`, `÷`).
-- Enter the second number.
-- Click "Calculate" to see the result.
-
-## Project Structure
-
-```
-calculatorapp/
-├── app.js
-├── index.html
-├── public/
-│   └── style.css
-└── README.md
+```bash
+git clone https://github.com/vanchaudhary/calculatorapp.git
+cd calculatorapp
+npm ci
+npm start
 ```
 
-## Architecture
+Open <http://localhost:3000>. Set `PORT` to use a different port:
 
-- High-Level Design (HLD): [docs/architecture/hld-cdc-iceberg.md](docs/architecture/hld-cdc-iceberg.md)
+```bash
+PORT=8080 npm start
+```
 
-## License
+The web app supports addition, subtraction, multiplication, and division. It
+validates numeric input and rejects division by zero.
 
-MIT
+### Run with Docker
+
+```bash
+docker build -t calculatorapp .
+docker run --rm -p 3000:3000 calculatorapp
+```
+
+### Check the service
+
+```bash
+curl http://localhost:3000/healthz
+```
+
+Expected response:
+
+```json
+{"status":"ok"}
+```
+
+## Documentation
+
+See [`DOCUMENTATION.md`](DOCUMENTATION.md) for the project structure, endpoint
+reference, calculator module API, logging behavior, REST API demo, deployment
+instructions, and troubleshooting guidance.
+
+The repository also includes a separate data-platform architecture reference:
+[`docs/architecture/hld-cdc-iceberg.md`](docs/architecture/hld-cdc-iceberg.md).
